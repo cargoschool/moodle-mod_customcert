@@ -224,6 +224,8 @@ $string['showposxy'] = 'Show position X and Y';
 $string['showposxy_desc'] = 'This will show the X and Y position when editing of an element, allowing the user to accurately specify the location.
 
 This isn\'t required if you plan on solely using the drag and drop interface for this purpose.';
+$string['sitelanguage'] = 'Force certificate language';
+$string['sitelanguage_desc'] = 'Force every certificate on the site to be generated in the selected language. Certificates that already force a language of their own are not affected. When set to "Do not force", each certificate falls back to the course language, then to the user\'s language.';
 $string['subplugintype_customcertelement'] = 'Element';
 $string['subplugintype_customcertelement_plural'] = 'Elements';
 $string['taskemailcertificate'] = 'Handles emailing certificates.';

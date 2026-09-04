@@ -43,6 +43,15 @@ $settings->add(new admin_setting_configcheckbox(
     0
 ));
 
+$languageoptions = ['' => get_string('forceno')] + get_string_manager()->get_list_of_translations();
+$settings->add(new admin_setting_configselect(
+    'customcert/language',
+    get_string('sitelanguage', 'customcert'),
+    get_string('sitelanguage_desc', 'customcert'),
+    '',
+    $languageoptions
+));
+
 $settings->add(new \mod_customcert\admin_setting_link(
     'customcert/verifycertificate',
     get_string('verifycertificate', 'customcert'),

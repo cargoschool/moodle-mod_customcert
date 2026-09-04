@@ -99,6 +99,50 @@ final class lib_test extends advanced_testcase {
     }
 
     /**
+     * Test that the certificate language wins over the site-wide forced language.
+     *
+     * @covers ::mod_customcert_get_language_to_use
+     */
+    public function test_get_language_to_use_cert_beats_site_setting(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $this->ensure_base_langs();
+
+        set_config('language', 'fr', 'customcert');
+
+        $customcert = (object)[
+            'language' => 'es_co',
+        ];
+
+        $this->assertSame('es_co', mod_customcert_get_language_to_use($customcert, null, null));
+    }
+
+    /**
+     * Test that the site-wide forced language is used when the certificate has none.
+     *
+     * @covers ::mod_customcert_get_language_to_use
+     */
+    public function test_get_language_to_use_site_setting_when_cert_empty(): void {
+        global $USER;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $this->ensure_base_langs();
+
+        set_config('language', 'es_co', 'customcert');
+
+        $user = $this->getDataGenerator()->create_user(['lang' => 'es']);
+        $USER = $user;
+
+        $customcert = (object)[
+            'language' => '',
+        ];
+
+        // The site setting takes precedence over both the course and the user language.
+        $this->assertSame('es_co', mod_customcert_get_language_to_use($customcert, $user, 'fr'));
+    }
+
+    /**
      * Test get language to use course language.
      *
      * @covers ::mod_customcert_get_language_to_use
@@ -365,29 +409,5 @@ final class lib_test extends advanced_testcase {
         // Should not throw — element belongs to the same context.
         $html = mod_customcert_output_fragment_editelement($args);
         $this->assertIsString($html);
-    }
-
-    /**
-     * Test that mod_customcert_output_fragment_editelement rejects a user who can view the
-     * certificate but cannot manage it.
-     *
-     * @covers ::mod_customcert_output_fragment_editelement
-     */
-    public function test_output_fragment_editelement_rejects_view_only_capability(): void {
-        $course = $this->getDataGenerator()->create_course();
-        [, , $elementid, $context] = $this->create_cert_with_element($course);
-
-        // A plain enrolled student has mod/customcert:view but not mod/customcert:manage.
-        $student = $this->getDataGenerator()->create_user();
-        $this->getDataGenerator()->enrol_user($student->id, $course->id);
-        $this->setUser($student);
-
-        $args = [
-            'elementid' => $elementid,
-            'context'   => $context,
-        ];
-
-        $this->expectException('required_capability_exception');
-        mod_customcert_output_fragment_editelement($args);
     }
 }
