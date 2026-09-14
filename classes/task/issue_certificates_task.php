@@ -206,11 +206,11 @@ class issue_certificates_task extends \core\task\scheduled_task {
                 if (!empty($issue)) {
                     $issueid = (int)$issue->id;
                     $emailed = (int)$issue->emailed;
-                } else if (!empty($customcert->emailstudents)) {
-                    // Only proactively issue a certificate on the student's behalf when emailstudents
-                    // is enabled. Otherwise (e.g. only emailteachers/emailothers is set), we must not
-                    // manufacture a certificate for a student who hasn't triggered issuance themselves
-                    // (e.g. by viewing it) -- we can only notify about certificates that already exist.
+                } else if (!empty($customcert->emailstudents)
+                        || !empty($customcert->emailteachers)
+                        || \core_text::strlen(trim($customcert->emailothers ?? '')) >= 3) {
+                    // Modifica fatta per generare il certificato anche se non è stato ancora emesso, 
+                    // purché sia configurato per inviare email a studenti, insegnanti o altri destinatari.
                     $issueid = \mod_customcert\certificate::issue_certificate($customcert->id, $filtereduser->id);
                     $emailed = 0;
                 }
