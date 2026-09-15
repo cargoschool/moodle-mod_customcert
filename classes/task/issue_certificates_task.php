@@ -17,12 +17,6 @@
 /**
  * A scheduled task for issuing certificates that have requested someone get emailed.
  *
- * PATCH CargoSchool (vedi i commenti "PATCH CargoSchool" nel corpo del file):
- *  1. Emissione anche quando e' configurato solo emailteachers o emailothers, ripristinando
- *     il comportamento della 3.10.
- *  2. Esclusione del personale docente dai destinatari.
- *  3. Valutazione delle restrizioni di accesso senza il bypass da capability.
- *
  * @package    mod_customcert
  * @copyright  2024 Oscar Nadjar <oscar.nadjar@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -89,7 +83,7 @@ class issue_certificates_task extends \core\task\scheduled_task {
             // Exclude certificates from hidden courses.
             $sql .= " AND co.visible = 1 AND (cat.visible = 1 OR cat.id IS NULL)";
         }
-
+         
         // Add condition based on certificate execution period.
         if ($certificateexecutionperiod > 0) {
             // Include courses with no end date or end date greater than the specified period.
@@ -111,9 +105,11 @@ class issue_certificates_task extends \core\task\scheduled_task {
         foreach ($customcerts as $customcert) {
             // Check if the certificate is hidden, quit early.
             $cm = get_course_and_cm_from_instance($customcert->id, 'customcert', $customcert->course)[1];
+			
             if (!$cm->visible) {
                 continue;
             }
+			
 
             // Do not process an empty certificate.
             $sql = "SELECT ce.*
@@ -145,12 +141,6 @@ class issue_certificates_task extends \core\task\scheduled_task {
             // Get the context of the Custom Certificate module.
             $cmcontext = \context_module::instance($cm->id);
 
-            // PATCH CargoSchool: personale del corso, precalcolato una volta sola per certificato.
-            // In lib/db/access.php del core la capability viewhiddenactivities e' concessa per
-            // archetipo a manager, coursecreator, editingteacher e teacher, mai agli studenti:
-            // e' il discriminante piu' robusto fra corsista e staff, indipendente dai ruoli custom.
-            $staffusers = get_users_by_capability($cmcontext, 'moodle/course:viewhiddenactivities', 'u.id');
-
             // Get users with the mod/customcert:receiveissue capability in the Custom Certificate module context.
             $userswithissue = get_users_by_capability($cmcontext, 'mod/customcert:receiveissue');
             // Get users with mod/customcert:view capability.
@@ -180,31 +170,9 @@ class issue_certificates_task extends \core\task\scheduled_task {
                     continue;
                 }
 
-                // PATCH CargoSchool: esclude il personale docente (teacher, editingteacher,
-                // coursecreator, manager, admin). Vedi $staffusers sopra.
-                if (array_key_exists($filtereduser->id, $staffusers)) {
-                    continue;
-                }
-
-                // PATCH CargoSchool: ripristina l'esclusione dei gestori, presente nella 3.10 e
-                // diventata codice morto in questa versione ($userswithmanage popolato e mai usato).
-                // Ridondante rispetto al controllo precedente, tenuto come rete di sicurezza.
-                if (array_key_exists($filtereduser->id, $userswithmanage)) {
-                    continue;
-                }
-
                 // Check whether the CM is visible to this user.
                 $usercm = get_fast_modinfo($customcert->courseid, $filtereduser->id)->instances['customcert'][$customcert->id];
                 if (!$usercm->uservisible) {
-                    continue;
-                }
-
-                // PATCH CargoSchool: valuta l'albero delle restrizioni di accesso per questo utente
-                // senza il bypass che moodle/course:ignoreavailabilityrestrictions concede allo staff
-                // e che uservisible invece applica. Deve stare dopo la valorizzazione di $usercm.
-                $strictreason = '';
-                $strictavailability = new \core_availability\info_module($usercm);
-                if (!$strictavailability->is_available($strictreason, false, (int)$filtereduser->id)) {
                     continue;
                 }
 
@@ -240,18 +208,18 @@ class issue_certificates_task extends \core\task\scheduled_task {
                 if (!empty($issue)) {
                     $issueid = (int)$issue->id;
                     $emailed = (int)$issue->emailed;
-                } else if (!empty($customcert->emailstudents)
-                        || !empty($customcert->emailteachers)
-                        || \core_text::strlen(trim($customcert->emailothers ?? '')) >= 3) {
-                    // PATCH CargoSchool: genera il certificato quando e' configurato almeno un
-                    // destinatario email, non solo quando e' attivo emailstudents. Ripristina il
-                    // comportamento della 3.10, su cui si basa la configurazione della piattaforma.
-                    $issueid = \mod_customcert\certificate::issue_certificate($customcert->id, $filtereduser->id);
-                    $emailed = 0;
-                }
+                } 
+                    // Condizione modificata da Marco perchè non includeva emailothers
+					else if  (!empty($customcert->emailstudents) || !empty(trim($customcert->emailothers))) {
+   					 $issueid = \mod_customcert\certificate::issue_certificate($customcert->id,$filtereduser->id);
+    					$emailed = 0;
+					}
+					
+					
+      
 
                 // If we have an issue and it has not been emailed yet, send it now.
-                if (!empty($issueid) && $emailed === 0) {
+                if (!empty($issueid) && $emailed === 0 ) {
                     $task = new \mod_customcert\task\email_certificate_task();
                     $task->set_custom_data(['issueid' => $issueid, 'customcertid' => $customcert->id]);
                     $useadhoc = get_config('customcert', 'useadhoc');
