@@ -61,6 +61,7 @@ class issue_certificates_task extends \core\task\scheduled_task {
 
         $emailotherslengthsql = $DB->sql_length('c.emailothers');
         $sql = "SELECT DISTINCT c.id, c.templateid, c.course, c.requiredtime, c.emailstudents, c.emailteachers, $emailothersselect,
+                       c.issueautomatically,
                        ct.id AS templateid, ct.name AS templatename, ct.contextid, co.id AS courseid,
                        co.fullname AS coursefullname, co.shortname AS courseshortname
                   FROM {customcert} c
@@ -83,7 +84,7 @@ class issue_certificates_task extends \core\task\scheduled_task {
             // Exclude certificates from hidden courses.
             $sql .= " AND co.visible = 1 AND (cat.visible = 1 OR cat.id IS NULL)";
         }
-         
+
         // Add condition based on certificate execution period.
         if ($certificateexecutionperiod > 0) {
             // Include courses with no end date or end date greater than the specified period.
@@ -105,11 +106,9 @@ class issue_certificates_task extends \core\task\scheduled_task {
         foreach ($customcerts as $customcert) {
             // Check if the certificate is hidden, quit early.
             $cm = get_course_and_cm_from_instance($customcert->id, 'customcert', $customcert->course)[1];
-			
             if (!$cm->visible) {
                 continue;
             }
-			
 
             // Do not process an empty certificate.
             $sql = "SELECT ce.*
@@ -126,13 +125,17 @@ class issue_certificates_task extends \core\task\scheduled_task {
             // Get the context.
             $context = \context::instance_by_id($customcert->contextid);
 
-            // Get a list of all the issues that are already emailed (skip these users).
+            // Users who need no further email processing (skip these users): once emailstudents is
+            // enabled, only studentemailed = 0 remains a retry candidate.
             $sql = "SELECT u.id
                       FROM {customcert_issues} ci
                       JOIN {user} u
                         ON ci.userid = u.id
                      WHERE ci.customcertid = :customcertid
                            AND ci.emailed = 1";
+            if (!empty($customcert->emailstudents)) {
+                $sql .= " AND (ci.studentemailed = 1 OR ci.studentemailed IS NULL)";
+            }
             $issuedusers = $DB->get_records_sql($sql, ['customcertid' => $customcert->id]);
 
             // Now, get a list of users who can Manage the certificate.
@@ -152,7 +155,13 @@ class issue_certificates_task extends \core\task\scheduled_task {
             $infomodule = new \core_availability\info_module($cm);
             $filteredusers = $infomodule->filter_user_list($userswithissueview);
 
-            $completion = new \completion_info(get_course((int)$customcert->courseid));
+            // Auto-issue only for "Email students", or when this certificate's own "Issue
+            // certificates automatically" setting is enabled (#672, #904).
+            // CargoSchool: also when "Email others" is filled in (patch of Marco, kept from 4.4.13-cargoschool3,
+            // so that certificates sent only to the company addresses keep being issued without changing
+            // every activity). The official alternative is to enable "Issue certificates automatically".
+            $autoissue = !empty($customcert->emailstudents) || !empty($customcert->issueautomatically)
+                || trim((string)($customcert->emailothers ?? '')) !== '';
 
             foreach ($filteredusers as $filtereduser) {
                 // Do not issue certs to suspended users.
@@ -176,14 +185,6 @@ class issue_certificates_task extends \core\task\scheduled_task {
                     continue;
                 }
 
-                // Skip users who have not yet met completion conditions configured on the certificate itself.
-                if (
-                    $completion->is_enabled($usercm) &&
-                    !$this->has_met_own_completion($completion, $usercm, (int)$filtereduser->id)
-                ) {
-                    continue;
-                }
-
                 // Check required time (if any).
                 if (!empty($customcert->requiredtime)) {
                     if (
@@ -200,26 +201,29 @@ class issue_certificates_task extends \core\task\scheduled_task {
                 $issue = $DB->get_record(
                     'customcert_issues',
                     ['userid' => $filtereduser->id, 'customcertid' => $customcert->id],
-                    'id, emailed'
+                    'id, emailed, studentemailed'
                 );
 
                 $issueid = null;
                 $emailed = 0;
+                $studentemailed = 0;
                 if (!empty($issue)) {
                     $issueid = (int)$issue->id;
                     $emailed = (int)$issue->emailed;
-                } 
-                    // Condizione modificata da Marco perchè non includeva emailothers
-					else if  (!empty($customcert->emailstudents) || !empty(trim($customcert->emailothers))) {
-   					 $issueid = \mod_customcert\certificate::issue_certificate($customcert->id,$filtereduser->id);
-    					$emailed = 0;
-					}
-					
-					
-      
+                    // Preserve NULL rather than casting to int, which would collapse it into 0.
+                    $studentemailed = $issue->studentemailed === null ? null : (int)$issue->studentemailed;
+                } else if ($autoissue) {
+                    // A newly created issue is always explicitly 0 (known, retryable), never NULL
+                    // -- see \mod_customcert\certificate::issue_certificate().
+                    $issueid = \mod_customcert\certificate::issue_certificate($customcert->id, $filtereduser->id);
+                    $emailed = 0;
+                    $studentemailed = 0;
+                }
 
-                // If we have an issue and it has not been emailed yet, send it now.
-                if (!empty($issueid) && $emailed === 0 ) {
+                // If we have an issue and it still needs email processing, send it now.
+                $needsemail = $emailed === 0
+                    || (!empty($customcert->emailstudents) && $studentemailed === 0);
+                if (!empty($issueid) && $needsemail) {
                     $task = new \mod_customcert\task\email_certificate_task();
                     $task->set_custom_data(['issueid' => $issueid, 'customcertid' => $customcert->id]);
                     $useadhoc = get_config('customcert', 'useadhoc');
@@ -231,24 +235,5 @@ class issue_certificates_task extends \core\task\scheduled_task {
                 }
             }
         }
-    }
-
-    /**
-     * Check whether a user has met the completion conditions configured on the certificate cm itself.
-     *
-     * This is distinct from availability/restrict access, which is already enforced via uservisible.
-     * Activity completion tracking is only ever consulted by other activities' restrict access rules
-     * unless we check it explicitly here, so a certificate configured with completion conditions but no
-     * restrict access rule would otherwise be issued/emailed regardless of the user's completion state.
-     *
-     * @param \completion_info $completion
-     * @param object $cm
-     * @param int $userid
-     * @return bool
-     */
-    private function has_met_own_completion(\completion_info $completion, object $cm, int $userid): bool {
-        $data = $completion->get_data($cm, false, $userid);
-
-        return in_array((int)$data->completionstate, [COMPLETION_COMPLETE, COMPLETION_COMPLETE_PASS], true);
     }
 }

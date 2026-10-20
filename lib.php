@@ -220,8 +220,10 @@ function customcert_user_complete($course, $user, $mod, $customcert) {
 /**
  * Serves certificate issues and other files.
  *
- * @param stdClass $course
- * @param stdClass $cm
+ * $course and $cm may be null for system-context requests.
+ *
+ * @param stdClass|null $course
+ * @param stdClass|null $cm
  * @param context $context
  * @param string $filearea
  * @param array $args
@@ -229,7 +231,7 @@ function customcert_user_complete($course, $user, $mod, $customcert) {
  * @return bool|null false if file not found, does not return anything if found - just send the file
  */
 function customcert_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload) {
-    global $CFG;
+    global $CFG, $USER;
 
     require_once($CFG->libdir . '/filelib.php');
 
@@ -251,6 +253,34 @@ function customcert_pluginfile($course, $cm, $context, $filearea, $args, $forced
         }
 
         send_stored_file($file, 0, 0, $forcedownload);
+    } else if ($filearea === \mod_customcert\certificate::SITE_DOWNLOAD_FILEAREA) {
+        // The generated site-wide "download all certificates" archive, only ever served to the
+        // user it was generated for.
+        if ($context->contextlevel != CONTEXT_SYSTEM) {
+            return false;
+        }
+
+        require_login();
+
+        if (!has_capability('mod/customcert:viewallcertificates', $context)) {
+            return false;
+        }
+
+        $itemid = (int) array_shift($args);
+        if ($itemid !== (int) $USER->id) {
+            return false;
+        }
+
+        $filename = array_pop($args);
+        $filepath = $args ? '/' . implode('/', $args) . '/' : '/';
+
+        $fs = get_file_storage();
+        $file = $fs->get_file($context->id, 'mod_customcert', $filearea, $itemid, $filepath, $filename);
+        if (!$file || $file->is_directory()) {
+            return false;
+        }
+
+        send_stored_file($file, 0, 0, true);
     }
 }
 
@@ -262,6 +292,7 @@ function customcert_pluginfile($course, $cm, $context, $filearea, $args, $forced
  * @uses FEATURE_GROUPMEMBERSONLY
  * @uses FEATURE_MOD_INTRO
  * @uses FEATURE_COMPLETION_TRACKS_VIEWS
+ * @uses FEATURE_COMPLETION_HAS_RULES
  * @uses FEATURE_GRADE_HAS_GRADE
  * @uses FEATURE_GRADE_OUTCOMES
  * @param string $feature FEATURE_xx constant for requested feature
@@ -273,6 +304,7 @@ function customcert_supports($feature) {
         case FEATURE_MOD_INTRO:
         case FEATURE_SHOW_DESCRIPTION:
         case FEATURE_COMPLETION_TRACKS_VIEWS:
+        case FEATURE_COMPLETION_HAS_RULES:
         case FEATURE_BACKUP_MOODLE2:
         case FEATURE_GROUPS:
             return true;
@@ -281,6 +313,39 @@ function customcert_supports($feature) {
         default:
             return null;
     }
+}
+
+/**
+ * Given a course_module object, this function returns any "extra" information that may be
+ * needed when printing this activity in a course listing, and populates the custom completion
+ * rules so that core completion can evaluate them for this instance.
+ *
+ * Without this, cm_info::get_custom_data() never contains 'completionemailed', and core
+ * completion silently skips the rule instead of evaluating it.
+ *
+ * @param stdClass $coursemodule The coursemodule object (record).
+ * @return cached_cm_info|false
+ */
+function customcert_get_coursemodule_info($coursemodule) {
+    global $DB;
+
+    $customcert = $DB->get_record(
+        'customcert',
+        ['id' => $coursemodule->instance],
+        'id, name, completionemailed'
+    );
+    if (!$customcert) {
+        return false;
+    }
+
+    $info = new cached_cm_info();
+    $info->name = $customcert->name;
+
+    if ($coursemodule->completion == COMPLETION_TRACKING_AUTOMATIC) {
+        $info->customdata['customcompletionrules']['completionemailed'] = $customcert->completionemailed;
+    }
+
+    return $info;
 }
 
 /**

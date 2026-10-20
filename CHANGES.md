@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 Note - All hash comments refer to the issue number. Eg. #169 refers to https://github.com/mdjnelson/moodle-mod_customcert/issues/169.
 
+## [4.4.16] - 2026-10-11
+
+### Fixed
+
+- Fixed missing certificates in site-wide downloads when certificates share a template name (#1019).
+- Fixed automatic certificate issuance being blocked by the certificate activity's own completion conditions (#1020).
+
+## [4.4.15] - 2026-10-06
+
+### Fixed
+
+- Restored the runtime language when PDF generation fails (#933).
+- Limited the number of PDFs generated per request in the issues web service to prevent excessive resource use (#934).
+
+### Added
+
+- Site-wide certificate downloads are now processed asynchronously. Requesting a download queues a background task that generates the zip archive and notifies the user when it is ready (#692).
+- Added an automatic activity completion condition for certificates emailed to students, allowing students to complete the activity when their certificate is sent by email without needing to view the activity (#971, #645).
+
+### Security
+
+- Fixed an authorisation bypass in mobile certificate issuance that could allow certificates to be issued without satisfying activity access restrictions ([GHSA-8qc7-g467-47v9](https://github.com/mdjnelson/moodle-mod_customcert/security/advisories/GHSA-8qc7-g467-47v9)).
+- Fixed validation of certificate element settings to prevent disclosure of sensitive user data, cross-course grades, and files through crafted save-element requests ([GHSA-q482-gjmc-jw88](https://github.com/mdjnelson/moodle-mod_customcert/security/advisories/GHSA-q482-gjmc-jw88)).
+
+## [4.4.14] - 2026-09-15
+
+### Security
+
+- Fixed template management authorisation to ensure permissions are checked against the target template's context rather than a caller-supplied context.
+- Custom profile fields used by the User field element now respect Moodle's profile field visibility rules, preventing hidden profile data from being displayed to users who do not have permission to view it.
+
+### Added
+
+- Added an opt-in "Issue certificates automatically" setting, allowing certificates to be issued and sent to "Email teachers" or "Email others" recipients when "Email students" is disabled (#904).
+
 ## [4.4.13] - 2026-08-23
 
 ### Security

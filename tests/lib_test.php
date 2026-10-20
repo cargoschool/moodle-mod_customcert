@@ -99,7 +99,7 @@ final class lib_test extends advanced_testcase {
     }
 
     /**
-     * Test that the certificate language wins over the site-wide forced language.
+     * CargoSchool: the certificate language wins over the site-wide forced language.
      *
      * @covers ::mod_customcert_get_language_to_use
      */
@@ -118,22 +118,19 @@ final class lib_test extends advanced_testcase {
     }
 
     /**
-     * Test that the site-wide forced language is used when the certificate has none.
+     * CargoSchool: the site-wide forced language is used when the certificate has none.
      *
      * @covers ::mod_customcert_get_language_to_use
      */
     public function test_get_language_to_use_site_setting_when_cert_empty(): void {
-        global $USER;
-
         $this->resetAfterTest();
         $this->setAdminUser();
         $this->ensure_base_langs();
 
         set_config('language', 'es_co', 'customcert');
 
-        $user = $this->getDataGenerator()->create_user(['lang' => 'es']);
-        $USER = $user;
-
+        // Only the lang field is read: no need to create the user (and no language pack needed).
+        $user = (object)['id' => 0, 'lang' => 'es'];
         $customcert = (object)[
             'language' => '',
         ];
@@ -409,5 +406,59 @@ final class lib_test extends advanced_testcase {
         // Should not throw — element belongs to the same context.
         $html = mod_customcert_output_fragment_editelement($args);
         $this->assertIsString($html);
+    }
+
+    /**
+     * Test that mod_customcert_output_fragment_editelement rejects a user who can view the
+     * certificate but cannot manage it.
+     *
+     * @covers ::mod_customcert_output_fragment_editelement
+     */
+    public function test_output_fragment_editelement_rejects_view_only_capability(): void {
+        $course = $this->getDataGenerator()->create_course();
+        [, , $elementid, $context] = $this->create_cert_with_element($course);
+
+        // A plain enrolled student has mod/customcert:view but not mod/customcert:manage.
+        $student = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($student->id, $course->id);
+        $this->setUser($student);
+
+        $args = [
+            'elementid' => $elementid,
+            'context'   => $context,
+        ];
+
+        $this->expectException('required_capability_exception');
+        mod_customcert_output_fragment_editelement($args);
+    }
+
+    /**
+     * The upgrade step that introduced issueautomatically must default existing certificates to
+     * 0 (disabled), preserving the #672 behaviour for sites that have not opted in.
+     *
+     * @covers ::xmldb_customcert_upgrade
+     */
+    public function test_upgrade_defaults_issueautomatically_to_disabled(): void {
+        global $DB, $CFG;
+
+        $course = $this->getDataGenerator()->create_course();
+        $customcert = $this->getDataGenerator()->create_module('customcert', ['course' => $course->id]);
+
+        $dbman = $DB->get_manager();
+        $table = new \xmldb_table('customcert');
+        $field = new \xmldb_field('issueautomatically');
+        $dbman->drop_field($table, $field);
+
+        // Upgrade_mod_savepoint() refuses to "advance" to a version that isn't strictly greater
+        // than what's on record, so roll the stored plugin version back to simulate a site that
+        // is genuinely upgrading from before this field existed.
+        set_config('version', 2024042221, 'mod_customcert');
+
+        require_once($CFG->libdir . '/upgradelib.php');
+        require_once($CFG->dirroot . '/mod/customcert/db/upgrade.php');
+        xmldb_customcert_upgrade(2024042221);
+
+        $this->assertTrue($dbman->field_exists($table, new \xmldb_field('issueautomatically')));
+        $this->assertEquals(0, (int)$DB->get_field('customcert', 'issueautomatically', ['id' => $customcert->id]));
     }
 }
