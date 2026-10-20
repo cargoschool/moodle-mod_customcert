@@ -1,14 +1,14 @@
 # mod_customcert — modifiche CargoSchool
 
-Versione: **4.4.16-cargoschool.2** (`2024042228`), basata sulla release ufficiale **4.4.16**
+Versione: **4.4.16-cargoschool.3** (`2024042228`), basata sulla release ufficiale **4.4.16**
 (`2024042228`, tag `v4.4.16` di https://github.com/mdjnelson/moodle-mod_customcert, ramo `MOODLE_404_STABLE`,
 che è quello usato su Moodle 4.5).
 
-Precedenti: 4.4.16-cargoschool.1 (stesso numero: nessuna modifica al database); 4.4.13-cargoschool3 (`2024042224`), basata sulla 4.4.13 ufficiale (`2024042221`).
+Precedenti: 4.4.16-cargoschool.1 e .2 (stesso numero: nessuna modifica al database); 4.4.13-cargoschool3 (`2024042224`), basata sulla 4.4.13 ufficiale (`2024042221`).
 
 ## Regola sui numeri di versione
 
-Il numero di versione del modulo resta **sempre uguale a quello ufficiale** della release di partenza.
+Il numero di versione del modulo resta **sempre uguale a quello ufficiale** della release di partenza. Per questo Moodle non vede le release CargoSchool con lo stesso numero come aggiornamenti: dopo l'installazione si fa *Svuota tutte le cache* e si controllano le *Notifiche* per le impostazioni nuove.
 La 4.4.13-cargoschool3 aveva `2024042224`, un numero che l'ufficiale ha usato più avanti: chi aggiorna da lì
 salta i passi di upgrade ufficiali compresi fra `2024042221` e `2024042224`. È successo con il passo
 `2024042222`, che aggiunge `customcert.issueautomatically`: senza il campo il task di emissione si ferma.
@@ -24,6 +24,7 @@ cartella con l'ufficiale, togliendo le modifiche e gli elementi qui sotto.
 | A | `lib.php`, `settings.php`, `lang/en`, `lang/it`, `tests/lib_test.php` | **Lingua forzata per tutto il sito** (`customcert/language`): vale per i certificati che non forzano una lingua propria, prima della lingua del corso e di quella dell'utente. Dalla 4.4.13-cargoschool3. |
 | B | `classes/task/issue_certificates_task.php` | **Emissione automatica anche con "Email others"** (modifica di Marco, dalla 4.4.13-cargoschool3): il task emette il certificato anche quando è compilato solo *Email others*. Dalla 4.4.14 l'ufficiale ha l'opzione per attività *Issue certificates automatically*, spenta di serie, che però vale solo se è attiva anche un'opzione di invio per email: la modifica resta per non dover riaprire ogni attività. Il test ufficiale `email_certificate_task_test::test_email_certificates_others_does_not_bulk_issue_to_students` fallisce per questo, ed è voluto. |
 | C | `db/upgrade.php` | **Correzione dell'aggiornamento da `2024042224`**: aggiunge `customcert.issueautomatically` se manca (vedi la regola sopra). Innocua negli altri casi. |
+| E | `classes/local/cargoschool/owncompletion.php`, `classes/task/issue_certificates_task.php`, `settings.php`, `cli/cargoschool_owncompletion.php`, `tests/cargoschool_owncompletion_test.php` | **Emissione solo a chi ha completato l'attività certificato** (impostazione `customcert/cargoschoolowncompletion`, *Emetti solo a chi ha completato l'attività certificato*, accesa di serie). Fino alla 4.4.13 il task saltava chi non aveva completato l'attività certificato stessa (*visualizza l'attività*, completamento manuale); la 4.4.16 ha tolto il controllo (#1020) ed emette a tutti quelli che soddisfano le restrizioni d'accesso. In produzione 84 certificati con completamento proprio e invio via mail avrebbero mandato in blocco i certificati di chi ha superato il corso anche anni fa. Con la spunta il comportamento è quello della 4.4.13. Il comando `php mod/customcert/cli/cargoschool_owncompletion.php [--course=ID] [--users] [--all]` (sola lettura) elenca, certificato per certificato, gli studenti che riceverebbero il certificato togliendo la spunta: quando dice 0 si può togliere. Con la spunta falliscono sei test ufficiali di #1020 (`email_certificate_task_test`, voluto). |
 | D | `classes/local/cargoschool/reservation.php`, `settings.php` | **Prenotazione del certificato** (`mod_reservation`), regole condivise dagli elementi dei corsi LIVE, e impostazione **Direttore della scuola** (`customcert/cargoschooldirectors`, di serie `g.proietti@cargoschool.com`). Test `tests/cargoschool_reservation_test.php`. |
 
 Regole della classe `\mod_customcert\local\cargoschool\reservation`:
@@ -63,6 +64,6 @@ Quando il docente è il direttore restano *Instructor* sopra *School Director G.
 ## Come si rifà il fork su una nuova release ufficiale
 
 1. Si parte dal tag ufficiale e si copiano gli elementi CargoSchool in `element/`.
-2. Si riapplicano le mod A-D (le differenze sono piccole, cercare `CargoSchool` nei file).
+2. Si riapplicano le mod A-E (le differenze sono piccole, cercare `CargoSchool` nei file).
 3. `version.php`: stessa `version` dell'ufficiale, `release` = ufficiale + `-cargoschool.N`.
 4. Si confrontano i passi di `db/upgrade.php` con la versione installata.

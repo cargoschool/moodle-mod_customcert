@@ -26,7 +26,9 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['cargoschooldirectors'] = 'Direttore della scuola (username)';
 $string['cargoschooldirectors_desc'] = 'Username del direttore della scuola, uno per riga. Quando il docente della prenotazione è il direttore, gli elementi "Nome docente della prenotazione" e "Firma docente della prenotazione" non stampano nulla se hanno attiva l\'opzione "Nascondi quando il docente è il direttore": nome e firma del direttore sono già sul certificato.';
-$string['cargoschoolheading'] = 'CargoSchool - corsi LIVE';
-$string['cargoschoolheading_desc'] = 'Impostazioni usate dagli elementi CargoSchool che leggono la prenotazione del corso (mod_reservation).';
+$string['cargoschoolheading'] = 'CargoSchool';
+$string['cargoschoolheading_desc'] = 'Modifiche CargoSchool, descritte in CARGOSCHOOL.md del plugin.';
+$string['cargoschoolowncompletion'] = 'Emetti solo a chi ha completato l\'attività certificato';
+$string['cargoschoolowncompletion_desc'] = 'Come fino alla versione 4.4.13: l\'emissione automatica salta chi non ha completato l\'attività certificato stessa (per esempio "visualizza l\'attività" o completamento manuale). La versione 4.4.16 emette a tutti quelli che soddisfano le restrizioni d\'accesso: togliere la spunta solo dopo aver verificato, con il comando php mod/customcert/cli/cargoschool_owncompletion.php, che nessun certificato partirebbe a studenti che hanno superato il corso tempo fa.';
 $string['sitelanguage'] = 'Lingua forzata dei certificati';
 $string['sitelanguage_desc'] = 'Genera tutti i certificati del sito nella lingua scelta. I certificati che forzano già una lingua propria non cambiano. Con "Non forzare" ogni certificato usa la lingua del corso e poi quella dell\'utente.';

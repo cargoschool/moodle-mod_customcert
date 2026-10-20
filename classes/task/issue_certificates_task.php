@@ -163,6 +163,11 @@ class issue_certificates_task extends \core\task\scheduled_task {
             $autoissue = !empty($customcert->emailstudents) || !empty($customcert->issueautomatically)
                 || trim((string)($customcert->emailothers ?? '')) !== '';
 
+            // CargoSchool (mod E): as up to 4.4.13, skip the users who have not completed the certificate
+            // activity itself, while the setting customcert/cargoschoolowncompletion is on (see CARGOSCHOOL.md).
+            $owncompletion = \mod_customcert\local\cargoschool\owncompletion::enabled()
+                ? new \completion_info(get_course((int)$customcert->courseid)) : null;
+
             foreach ($filteredusers as $filtereduser) {
                 // Do not issue certs to suspended users.
                 if ($filtereduser->suspended) {
@@ -182,6 +187,14 @@ class issue_certificates_task extends \core\task\scheduled_task {
                 // Check whether the CM is visible to this user.
                 $usercm = get_fast_modinfo($customcert->courseid, $filtereduser->id)->instances['customcert'][$customcert->id];
                 if (!$usercm->uservisible) {
+                    continue;
+                }
+
+                // CargoSchool (mod E): own completion of the certificate activity, as in 4.4.13.
+                if (
+                    $owncompletion &&
+                    !\mod_customcert\local\cargoschool\owncompletion::is_met($owncompletion, $usercm, (int)$filtereduser->id)
+                ) {
                     continue;
                 }
 

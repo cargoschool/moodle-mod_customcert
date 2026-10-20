@@ -34,8 +34,10 @@ $string['awardedto'] = 'Awarded to';
 $string['cannotverifyallcertificates'] = 'You do not have the permission to verify all certificates on the site.';
 $string['cargoschooldirectors'] = 'School director (username)';
 $string['cargoschooldirectors_desc'] = 'Username of the school director, one per line. When the instructor of the reservation is the director, the elements "Reservation Teacher Name" and "Reservation Teacher Signature" print nothing if their option "Hide when the instructor is the director" is enabled: the director\'s name and signature are already on the certificate.';
-$string['cargoschoolheading'] = 'CargoSchool - LIVE courses';
-$string['cargoschoolheading_desc'] = 'Settings used by the CargoSchool elements that read the course reservation (mod_reservation).';
+$string['cargoschoolheading'] = 'CargoSchool';
+$string['cargoschoolheading_desc'] = 'CargoSchool changes, described in CARGOSCHOOL.md of the plugin.';
+$string['cargoschoolowncompletion'] = 'Issue only to who completed the certificate activity';
+$string['cargoschoolowncompletion_desc'] = 'As up to version 4.4.13: the automatic issuing skips the users who have not completed the certificate activity itself (for example "view the activity" or manual completion). Version 4.4.16 issues to everybody who meets the access restrictions: turn this off only after checking, with the command php mod/customcert/cli/cargoschool_owncompletion.php, that no certificate would be sent to students who passed long ago.';
 $string['certificate'] = 'Certificate';
 $string['certificateexecutionperiod'] = 'Certificate execution period';
 $string['certificateexecutionperiod_desc'] = 'If not 0, the task will not process certificates whose course has been inactive or the last issue is older than the configured time. This may help to improve the performance of the scheduled task.';
@@ -244,9 +246,9 @@ $string['showposxy'] = 'Show position X and Y';
 $string['showposxy_desc'] = 'This will show the X and Y position when editing of an element, allowing the user to accurately specify the location.
 
 This isn\'t required if you plan on solely using the drag and drop interface for this purpose.';
-$string['studentemailedunknown'] = 'Unknown (predates this feature)';
 $string['sitelanguage'] = 'Force certificate language';
 $string['sitelanguage_desc'] = 'Force every certificate on the site to be generated in the selected language. Certificates that already force a language of their own are not affected. When set to "Do not force", each certificate falls back to the course language, then to the user\'s language.';
+$string['studentemailedunknown'] = 'Unknown (predates this feature)';
 $string['subplugintype_customcertelement'] = 'Element';
 $string['subplugintype_customcertelement_plural'] = 'Elements';
 $string['taskcleanupsitecertificatesdownloads'] = 'Clean up old site certificates download archives';
