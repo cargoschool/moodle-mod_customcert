@@ -68,7 +68,7 @@ class reservation {
      * @param int $userid
      * @param int $courseid
      * @param int $before only sessions started before this time (0 = no limit)
-     * @return \stdClass|null fields: requestid, reservationid, timestart, timeend, teachers, grade
+     * @return \stdClass|null fields: requestid, reservationid, timestart, timeend, teachers, location, grade
      */
     public static function get_session(int $userid, int $courseid, int $before = 0): ?\stdClass {
         global $DB;
@@ -78,7 +78,7 @@ class reservation {
         }
 
         $beforesql = $before > 0 ? 'AND r.timestart <= :before' : '';
-        $sql = "SELECT rr.id AS requestid, r.id AS reservationid, r.timestart, r.timeend, r.teachers, rr.grade
+        $sql = "SELECT rr.id AS requestid, r.id AS reservationid, r.timestart, r.timeend, r.teachers, r.location, rr.grade
                   FROM {reservation_request} rr
                   JOIN {reservation} r ON r.id = rr.reservation
                  WHERE rr.userid = :userid
@@ -111,6 +111,20 @@ class reservation {
             $end = $start;
         }
         return [$start, $end];
+    }
+
+    /**
+     * The place of the session, '' for a virtual class.
+     *
+     * mod_reservation saves '' when no place is given, and '0' when "Other location"
+     * is left selected with an empty text: both mean a virtual class.
+     *
+     * @param \stdClass $session a record of get_session()
+     * @return string
+     */
+    public static function get_location(\stdClass $session): string {
+        $location = trim((string)($session->location ?? ''));
+        return ($location === '0') ? '' : $location;
     }
 
     /**

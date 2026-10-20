@@ -1,10 +1,10 @@
 # mod_customcert — modifiche CargoSchool
 
-Versione: **4.4.16-cargoschool.1** (`2024042228`), basata sulla release ufficiale **4.4.16**
+Versione: **4.4.16-cargoschool.2** (`2024042228`), basata sulla release ufficiale **4.4.16**
 (`2024042228`, tag `v4.4.16` di https://github.com/mdjnelson/moodle-mod_customcert, ramo `MOODLE_404_STABLE`,
 che è quello usato su Moodle 4.5).
 
-Precedente: 4.4.13-cargoschool3 (`2024042224`), basata sulla 4.4.13 ufficiale (`2024042221`).
+Precedenti: 4.4.16-cargoschool.1 (stesso numero: nessuna modifica al database); 4.4.13-cargoschool3 (`2024042224`), basata sulla 4.4.13 ufficiale (`2024042221`).
 
 ## Regola sui numeri di versione
 
@@ -39,8 +39,11 @@ Regole della classe `\mod_customcert\local\cargoschool\reservation`:
 |---|---|---|
 | `customcertelement_datediff` — *Data + 2 anni (scadenza)* | 1.1.0 (`2026102000`) | Una data di partenza più due anni. Dalla 1.1.0 la data di partenza può essere **Fine dell'aula (prenotazione)**, per i corsi LIVE senza completamento. Costanti di classe al posto delle `define()` globali, che coincidevano con quelle dell'elemento *Date* ufficiale. |
 | `customcertelement_reservationdates` — *Date dell'aula (prenotazione)* | 1.0.0 (`2026102000`), nuovo | Inizio e fine della sessione e ore del corso: *from October 12 to October 15, 2026 - 32 hours*; anni diversi *from December 29, 2026 to January 2, 2027 - 32 hours*; un giorno *on October 12, 2026 - 8 hours*. Ore dal campo del corso `iata_course_duration` (impostabile): un numero diventa *N hours*, un altro testo si stampa com'è, vuoto = niente ore. Mesi nella lingua del certificato, frasi modificabili come stringhe di lingua. |
+| `customcertelement_reservationtext` — *Testo secondo la prenotazione* | 1.0.0 (`2026102001`), nuovo (dalla cargoschool.2) | Un testo stampato solo se vale la condizione scelta: *il docente non è il direttore*, *il docente è il direttore*, *la lezione è in aula (luogo compilato)*, *la lezione è in virtual class (luogo vuoto)*. `{LOCATION}` nel testo = luogo della prenotazione. Luogo vuoto = `''` oppure `'0'` (*Altro luogo* senza testo). Usi: *Instructor* accanto al nome e *Instructor* sopra il direttore; *Classroom* e *Virtual Class* nella stessa posizione. |
 | `customcertelement_resevationteachername` — *Nome docente della prenotazione* | 1.1.0 (`2026102000`) | Nome del docente della sessione. Nuova opzione **Nascondi quando il docente è il direttore** (attiva negli elementi nuovi; quelli esistenti la ricevono solo se la si spunta). |
 | `customcertelement_resevationsignature` — *Firma docente della prenotazione* | 1.1.0 (`2026102000`) | Firma del docente della sessione. Nuove opzioni **Nascondi quando il docente è il direttore** e **Alpha channel** (opacità, 0–1, come l'elemento *Immagine* ufficiale). Le immagini delle firme si scaricano solo da chi può gestire i certificati del corso (fino alla 1.0 erano pubbliche). |
+
+Ogni elemento CargoSchool ha il suo repository (sottomodulo) `cargoschool/moodle-mod_customcert_<elemento>`.
 
 Il refuso `resevation` nei nomi dei componenti resta: rinominarli farebbe perdere gli elementi già salvati.
 
@@ -48,12 +51,14 @@ La firma del direttore è l'elemento *Immagine* ufficiale, che ha già **Alpha c
 
 ## Certificato unico per i corsi LIVE
 
-- *Instructor* (Testo) + *Nome docente della prenotazione* e *Firma docente della prenotazione*, entrambi con *Nascondi quando il docente è il direttore*;
+- *Nome docente della prenotazione* e *Firma docente della prenotazione*, entrambi con *Nascondi quando il docente è il direttore*;
 - *School Director G.Proietti* (Testo) + firma del direttore (*Immagine*), sempre presenti;
+- *Instructor* (Testo secondo la prenotazione, *il docente non è il direttore*) accanto al nome del docente, e *Instructor* (*il docente è il direttore*) sopra *School Director G.Proietti*;
+- *Examination venue:* (Testo) + *Classroom* (*la lezione è in aula*) e *Virtual Class* (*la lezione è in virtual class*), nella stessa posizione;
 - *Course duration:* (Testo) + *Date dell'aula (prenotazione)*;
 - *Expiring Date:* (Testo) + *Data + 2 anni (scadenza)* con *Fine dell'aula (prenotazione)* e formato *July 2018*.
 
-Quando il docente è il direttore restano la scritta *Instructor*, *School Director G.Proietti* e una sola firma.
+Quando il docente è il direttore restano *Instructor* sopra *School Director G.Proietti* e una sola firma; il nome del direttore non si ripete.
 
 ## Come si rifà il fork su una nuova release ufficiale
 

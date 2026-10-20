@@ -29,6 +29,7 @@ use mod_customcert\local\cargoschool\reservation;
  * @covers     \customcertelement_resevationteachername\element
  * @covers     \customcertelement_resevationsignature\element
  * @covers     \customcertelement_datediff\element
+ * @covers     \customcertelement_reservationtext\element
  */
 final class cargoschool_reservation_test extends \advanced_testcase {
     /**
@@ -50,13 +51,14 @@ final class cargoschool_reservation_test extends \advanced_testcase {
      * @param int $start
      * @param int $end
      * @param array $teacherids
+     * @param string $location place of the session, '' for a virtual class
      * @return int reservation id
      */
-    protected function add_reservation(int $courseid, int $start, int $end, array $teacherids): int {
+    protected function add_reservation(int $courseid, int $start, int $end, array $teacherids, string $location = ''): int {
         global $DB;
         return $DB->insert_record('reservation', (object)[
             'course' => $courseid, 'name' => 'Aula', 'intro' => '', 'introformat' => 1,
-            'teachers' => implode(',', $teacherids), 'location' => 'Virtual Class',
+            'teachers' => implode(',', $teacherids), 'location' => $location,
             'timestart' => $start, 'timeend' => $end, 'grade' => 100, 'timeopen' => 0, 'timeclose' => 0,
             'note' => 0, 'maxrequest' => 0, 'overbook' => 0, 'showrequest' => 0, 'parent' => 0, 'mailed' => 0,
             'completionreserved' => 0, 'timemodified' => time(), 'showseats' => 0, 'dualgrade' => 0,
@@ -275,6 +277,69 @@ final class cargoschool_reservation_test extends \advanced_testcase {
         // No session: nothing.
         $other = $this->getDataGenerator()->create_user();
         $this->assertSame('', $element->get_text($other->id, $course->id));
+    }
+
+    /**
+     * A conditional text element.
+     *
+     * @param string $condition
+     * @param string $text
+     * @return \customcertelement_reservationtext\element
+     */
+    protected function text_element(string $condition, string $text): \customcertelement_reservationtext\element {
+        return new \customcertelement_reservationtext\element((object)[
+            'id' => 0, 'pageid' => 0, 'name' => 'Testo', 'element' => 'reservationtext',
+            'data' => json_encode(['text' => $text, 'condition' => $condition]), 'font' => 'times', 'fontsize' => 12,
+            'colour' => '#000000', 'posx' => 0, 'posy' => 0, 'width' => 0, 'refpoint' => 1, 'alignment' => 'L',
+        ]);
+    }
+
+    /**
+     * Conditional texts: instructor director or not, classroom or virtual class.
+     */
+    public function test_conditional_text(): void {
+        $director = $this->getDataGenerator()->create_user(['username' => 'g.proietti@cargoschool.com']);
+        $teacher = $this->getDataGenerator()->create_user();
+        $s1 = $this->getDataGenerator()->create_user();
+        $s2 = $this->getDataGenerator()->create_user();
+        $s3 = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+
+        $live = $this->add_reservation(
+            $course->id,
+            $this->rome('2026-10-12'),
+            $this->rome('2026-10-15'),
+            [$teacher->id],
+            'Aula Malpensa'
+        );
+        $this->add_request($live, $s1->id);
+        $virtual = $this->add_reservation($course->id, $this->rome('2026-10-12'), $this->rome('2026-10-15'), [$director->id]);
+        $this->add_request($virtual, $s2->id);
+        // The "Other location" left selected with an empty text: saved as '0', a virtual class.
+        $other = $this->add_reservation($course->id, $this->rome('2026-10-12'), $this->rome('2026-10-15'), [$director->id], '0');
+        $this->add_request($other, $s3->id);
+
+        $notdirector = $this->text_element('notdirector', 'Instructor');
+        $isdirector = $this->text_element('director', 'Instructor');
+        $classroom = $this->text_element('classroom', 'Classroom ({LOCATION})');
+        $virtualtext = $this->text_element('virtual', 'Virtual Class');
+
+        $this->assertSame('Instructor', strip_tags($notdirector->get_text_for($s1->id, $course->id)));
+        $this->assertSame('', $isdirector->get_text_for($s1->id, $course->id));
+        $this->assertSame('Classroom (Aula Malpensa)', strip_tags($classroom->get_text_for($s1->id, $course->id)));
+        $this->assertSame('', $virtualtext->get_text_for($s1->id, $course->id));
+
+        $this->assertSame('', $notdirector->get_text_for($s2->id, $course->id));
+        $this->assertSame('Instructor', strip_tags($isdirector->get_text_for($s2->id, $course->id)));
+        $this->assertSame('', $classroom->get_text_for($s2->id, $course->id));
+        $this->assertSame('Virtual Class', strip_tags($virtualtext->get_text_for($s2->id, $course->id)));
+        $this->assertSame('Virtual Class', strip_tags($virtualtext->get_text_for($s3->id, $course->id)));
+
+        // No session: nothing at all.
+        $nobody = $this->getDataGenerator()->create_user();
+        foreach ([$notdirector, $isdirector, $classroom, $virtualtext] as $element) {
+            $this->assertSame('', $element->get_text_for($nobody->id, $course->id));
+        }
     }
 
     /**
