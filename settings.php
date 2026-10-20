@@ -43,6 +43,7 @@ $settings->add(new admin_setting_configcheckbox(
     0
 ));
 
+// CargoSchool: certificate language forced for the whole site.
 $languageoptions = ['' => get_string('forceno')] + get_string_manager()->get_list_of_translations();
 $settings->add(new admin_setting_configselect(
     'customcert/language',
@@ -50,6 +51,22 @@ $settings->add(new admin_setting_configselect(
     get_string('sitelanguage_desc', 'customcert'),
     '',
     $languageoptions
+));
+
+// CargoSchool: certificates of LIVE courses (elements reading mod_reservation).
+$settings->add(new admin_setting_heading(
+    'customcert/cargoschoolheading',
+    get_string('cargoschoolheading', 'customcert'),
+    get_string('cargoschoolheading_desc', 'customcert')
+));
+$settings->add(new admin_setting_configtextarea(
+    'customcert/cargoschooldirectors',
+    get_string('cargoschooldirectors', 'customcert'),
+    get_string('cargoschooldirectors_desc', 'customcert'),
+    'g.proietti@cargoschool.com',
+    PARAM_RAW,
+    40,
+    3
 ));
 
 $settings->add(new \mod_customcert\admin_setting_link(

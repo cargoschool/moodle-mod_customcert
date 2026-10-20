@@ -360,6 +360,17 @@ function xmldb_customcert_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2024042222, 'customcert');
     }
 
+    // CargoSchool: 4.4.13-cargoschool3 was numbered 2024042224, above the official 4.4.13 (2024042221).
+    // Sites upgrading from it skip the official step 2024042222 above, so the field it adds is missing.
+    // Add it here when needed; the check makes the block harmless everywhere else.
+    if ($oldversion >= 2024042222 && $oldversion < 2024042225) {
+        $table = new xmldb_table('customcert');
+        $field = new xmldb_field('issueautomatically', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'emailothers');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+    }
+
     if ($oldversion < 2024042225) {
         // Add 'completionemailed' field to enable per-instance completion when a certificate is emailed.
         $table = new xmldb_table('customcert');

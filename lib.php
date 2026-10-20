@@ -391,7 +391,7 @@ function mod_customcert_output_fragment_editelement($args) {
     if ((int)$args['context']->id !== (int)$template->contextid) {
         throw new \moodle_exception('Invalid access');
     }
-    
+
     // Only users who can manage this template may view the admin edit-element form.
     (new \mod_customcert\template($template))->require_manage();
 
@@ -546,7 +546,7 @@ function mod_customcert_get_fontawesome_icon_map() {
  *
  * Precedence:
  *   1. Certificate's forced language.
- *   2. Site-wide forced certificate language (admin setting).
+ *   2. Site-wide forced certificate language (admin setting, CargoSchool).
  *   3. Course language.
  *   4. User profile language.
  *   5. Site default.
@@ -567,7 +567,7 @@ function mod_customcert_get_language_to_use(stdClass $customcert, ?stdClass $use
         return $customcert->language;
     }
 
-    // No language forced at activity level, fall back to the site-wide setting, when configured.
+    // CargoSchool: no language forced at activity level, fall back to the site-wide setting, when configured.
     // This is useful on sites upgraded from earlier versions, where existing certificates have no
     // language set, and setting them one by one would not be practical.
     $sitelanguage = get_config('customcert', 'language');
