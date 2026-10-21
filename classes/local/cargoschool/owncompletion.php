@@ -150,6 +150,10 @@ class owncompletion {
                 if (self::is_met($completion, $usercm, (int)$user->id)) {
                     continue;
                 }
+                // Mod F: a student who already has another certificate of the course would not get it.
+                if (onepercourse::blocks((int)$customcert->id, (int)$customcert->course, (int)$user->id)) {
+                    continue;
+                }
                 $row->count++;
                 if ($withusers) {
                     $row->userids[] = (int)$user->id;

@@ -30,4 +30,4 @@ $plugin->cron      = 0; // Period for cron to check this module (secs).
 $plugin->component = 'mod_customcert';
 
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = "4.4.16-cargoschool.3"; // Official 4.4.16 + CargoSchool changes, see CARGOSCHOOL.md.
+$plugin->release   = "4.4.16-cargoschool.4"; // Official 4.4.16 + CargoSchool changes, see CARGOSCHOOL.md.

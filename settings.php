@@ -65,6 +65,12 @@ $settings->add(new admin_setting_configcheckbox(
     get_string('cargoschoolowncompletion_desc', 'customcert'),
     1
 ));
+$settings->add(new admin_setting_configcheckbox(
+    'customcert/cargoschoolonepercourse',
+    get_string('cargoschoolonepercourse', 'customcert'),
+    get_string('cargoschoolonepercourse_desc', 'customcert'),
+    1
+));
 $settings->add(new admin_setting_configtextarea(
     'customcert/cargoschooldirectors',
     get_string('cargoschooldirectors', 'customcert'),

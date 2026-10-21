@@ -225,7 +225,15 @@ class issue_certificates_task extends \core\task\scheduled_task {
                     $emailed = (int)$issue->emailed;
                     // Preserve NULL rather than casting to int, which would collapse it into 0.
                     $studentemailed = $issue->studentemailed === null ? null : (int)$issue->studentemailed;
-                } else if ($autoissue) {
+                } else if (
+                    $autoissue &&
+                    // CargoSchool (mod F): no second certificate of the same course for the same enrolment.
+                    !\mod_customcert\local\cargoschool\onepercourse::blocks(
+                        (int)$customcert->id,
+                        (int)$customcert->courseid,
+                        (int)$filtereduser->id
+                    )
+                ) {
                     // A newly created issue is always explicitly 0 (known, retryable), never NULL
                     // -- see \mod_customcert\certificate::issue_certificate().
                     $issueid = \mod_customcert\certificate::issue_certificate($customcert->id, $filtereduser->id);
