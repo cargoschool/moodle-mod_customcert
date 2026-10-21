@@ -40,17 +40,64 @@ class issue_certificates_task extends \core\task\scheduled_task {
         return get_string('taskissuecertificate', 'customcert');
     }
 
+    /** @var array CargoSchool preview: course:user pairs that would receive a new certificate. */
+    protected $previewissued = [];
+
     /**
      * Execute.
      */
     public function execute() {
+        // Get the certificatesperrun configuration and the offset of this run.
+        $certificatesperrun = (int)get_config('customcert', 'certificatesperrun');
+        $offset = (int)get_config('customcert', 'certificate_offset');
+
+        $customcerts = $this->get_customcerts($offset, $certificatesperrun);
+
+        // When we get to the end of the list, reset the offset.
+        set_config('certificate_offset', !empty($customcerts) ? $offset + $certificatesperrun : 0, 'customcert');
+
+        if (empty($customcerts)) {
+            return;
+        }
+
+        foreach ($customcerts as $customcert) {
+            $this->process_customcert($customcert);
+        }
+    }
+
+    /**
+     * CargoSchool: what the task would do, without issuing or emailing anything.
+     *
+     * Runs the same checks as execute() on every certificate (no paging), optionally of one course.
+     * Used by cli/cargoschool_preview.php.
+     *
+     * @param int $courseid 0 = all courses
+     * @return array of objects {customcert, userid, action}, action 'issue' (new issue, then email)
+     *         or 'email' (existing issue still to email)
+     */
+    public function preview(int $courseid = 0): array {
+        $preview = [];
+        $this->previewissued = [];
+        foreach ($this->get_customcerts(0, 0, $courseid) as $customcert) {
+            $this->process_customcert($customcert, $preview);
+        }
+        return $preview;
+    }
+
+    /**
+     * The certificates the task looks at (the query of the official execute()).
+     *
+     * @param int $offset
+     * @param int $limit 0 = all
+     * @param int $courseid CargoSchool, preview only: 0 = all courses
+     * @return array
+     */
+    protected function get_customcerts(int $offset, int $limit, int $courseid = 0): array {
         global $CFG, $DB;
 
-        // Get the certificatesperrun, includeinnotvisiblecourses, and certificateexecutionperiod configurations.
-        $certificatesperrun = (int)get_config('customcert', 'certificatesperrun');
+        // Get the includeinnotvisiblecourses and certificateexecutionperiod configurations.
         $includeinnotvisiblecourses = (bool)get_config('customcert', 'includeinnotvisiblecourses');
         $certificateexecutionperiod = (int)get_config('customcert', 'certificateexecutionperiod');
-        $offset = (int)get_config('customcert', 'certificate_offset');
 
         if ($CFG->dbtype === 'oci') {
             // For Oracle, convert the CLOB to a VARCHAR2 (limiting to 4000 characters) since we are using DISTINCT.
@@ -93,166 +140,188 @@ class issue_certificates_task extends \core\task\scheduled_task {
             $params['enddate2'] = $params['enddate'];
         }
 
+        if ($courseid > 0) {
+            $sql .= " AND c.course = :cargoschoolcourseid";
+            $params['cargoschoolcourseid'] = $courseid;
+        }
+
         // Execute the SQL query.
-        $customcerts = $DB->get_records_sql($sql, $params, $offset, $certificatesperrun);
+        return $DB->get_records_sql($sql, $params, $offset, $limit);
+    }
 
-        // When we get to the end of the list, reset the offset.
-        set_config('certificate_offset', !empty($customcerts) ? $offset + $certificatesperrun : 0, 'customcert');
+    /**
+     * Issue and email one certificate to the users who should receive it (the loop of the official execute()).
+     *
+     * @param \stdClass $customcert a record of get_customcerts()
+     * @param array|null $preview CargoSchool: when given, nothing is issued or emailed, the actions are added here
+     */
+    protected function process_customcert(\stdClass $customcert, ?array &$preview = null): void {
+        global $DB;
 
-        if (empty($customcerts)) {
+        // Check if the certificate is hidden, quit early.
+        $cm = get_course_and_cm_from_instance($customcert->id, 'customcert', $customcert->course)[1];
+        if (!$cm->visible) {
             return;
         }
 
-        foreach ($customcerts as $customcert) {
-            // Check if the certificate is hidden, quit early.
-            $cm = get_course_and_cm_from_instance($customcert->id, 'customcert', $customcert->course)[1];
-            if (!$cm->visible) {
+        // Do not process an empty certificate.
+        $sql = "SELECT ce.*
+                  FROM {customcert_elements} ce
+                  JOIN {customcert_pages} cp
+                    ON cp.id = ce.pageid
+                  JOIN {customcert_templates} ct
+                    ON ct.id = cp.templateid
+                 WHERE ct.contextid = :contextid";
+        if (!$DB->record_exists_sql($sql, ['contextid' => $customcert->contextid])) {
+            return;
+        }
+
+        // Get the context.
+        $context = \context::instance_by_id($customcert->contextid);
+
+        // Users who need no further email processing (skip these users): once emailstudents is
+        // enabled, only studentemailed = 0 remains a retry candidate.
+        $sql = "SELECT u.id
+                  FROM {customcert_issues} ci
+                  JOIN {user} u
+                    ON ci.userid = u.id
+                 WHERE ci.customcertid = :customcertid
+                       AND ci.emailed = 1";
+        if (!empty($customcert->emailstudents)) {
+            $sql .= " AND (ci.studentemailed = 1 OR ci.studentemailed IS NULL)";
+        }
+        $issuedusers = $DB->get_records_sql($sql, ['customcertid' => $customcert->id]);
+
+        // Now, get a list of users who can Manage the certificate.
+        $userswithmanage = get_users_by_capability($context, 'mod/customcert:manage', 'u.id');
+
+        // Get the context of the Custom Certificate module.
+        $cmcontext = \context_module::instance($cm->id);
+
+        // Get users with the mod/customcert:receiveissue capability in the Custom Certificate module context.
+        $userswithissue = get_users_by_capability($cmcontext, 'mod/customcert:receiveissue');
+        // Get users with mod/customcert:view capability.
+        $userswithview = get_users_by_capability($cmcontext, 'mod/customcert:view');
+        // Users with both mod/customcert:view and mod/customcert:receiveissue capabilities.
+        $userswithissueview = array_intersect_key($userswithissue, $userswithview);
+
+        // Filter remaining users by availability conditions.
+        $infomodule = new \core_availability\info_module($cm);
+        $filteredusers = $infomodule->filter_user_list($userswithissueview);
+
+        // Auto-issue only for "Email students", or when this certificate's own "Issue
+        // certificates automatically" setting is enabled (#672, #904).
+        // CargoSchool: also when "Email others" is filled in (patch of Marco, kept from 4.4.13-cargoschool3,
+        // so that certificates sent only to the company addresses keep being issued without changing
+        // every activity). The official alternative is to enable "Issue certificates automatically".
+        $autoissue = !empty($customcert->emailstudents) || !empty($customcert->issueautomatically)
+            || trim((string)($customcert->emailothers ?? '')) !== '';
+
+        // CargoSchool (mod E): as up to 4.4.13, skip the users who have not completed the certificate
+        // activity itself, while the setting customcert/cargoschoolowncompletion is on (see CARGOSCHOOL.md).
+        $owncompletion = \mod_customcert\local\cargoschool\owncompletion::enabled()
+            ? new \completion_info(get_course((int)$customcert->courseid)) : null;
+
+        foreach ($filteredusers as $filtereduser) {
+            // Do not issue certs to suspended users.
+            if ($filtereduser->suspended) {
                 continue;
             }
 
-            // Do not process an empty certificate.
-            $sql = "SELECT ce.*
-                      FROM {customcert_elements} ce
-                      JOIN {customcert_pages} cp
-                        ON cp.id = ce.pageid
-                      JOIN {customcert_templates} ct
-                        ON ct.id = cp.templateid
-                     WHERE ct.contextid = :contextid";
-            if (!$DB->record_exists_sql($sql, ['contextid' => $customcert->contextid])) {
+            // Skip if the user has already been issued and emailed.
+            if (in_array($filtereduser->id, array_keys((array)$issuedusers))) {
                 continue;
             }
 
-            // Get the context.
-            $context = \context::instance_by_id($customcert->contextid);
-
-            // Users who need no further email processing (skip these users): once emailstudents is
-            // enabled, only studentemailed = 0 remains a retry candidate.
-            $sql = "SELECT u.id
-                      FROM {customcert_issues} ci
-                      JOIN {user} u
-                        ON ci.userid = u.id
-                     WHERE ci.customcertid = :customcertid
-                           AND ci.emailed = 1";
-            if (!empty($customcert->emailstudents)) {
-                $sql .= " AND (ci.studentemailed = 1 OR ci.studentemailed IS NULL)";
+            // Require mod/customcert:receiveissue capability.
+            if (!in_array($filtereduser->id, array_keys($userswithissue))) {
+                continue;
             }
-            $issuedusers = $DB->get_records_sql($sql, ['customcertid' => $customcert->id]);
 
-            // Now, get a list of users who can Manage the certificate.
-            $userswithmanage = get_users_by_capability($context, 'mod/customcert:manage', 'u.id');
+            // Check whether the CM is visible to this user.
+            $usercm = get_fast_modinfo($customcert->courseid, $filtereduser->id)->instances['customcert'][$customcert->id];
+            if (!$usercm->uservisible) {
+                continue;
+            }
 
-            // Get the context of the Custom Certificate module.
-            $cmcontext = \context_module::instance($cm->id);
+            // CargoSchool (mod E): own completion of the certificate activity, as in 4.4.13.
+            if (
+                $owncompletion &&
+                !\mod_customcert\local\cargoschool\owncompletion::is_met($owncompletion, $usercm, (int)$filtereduser->id)
+            ) {
+                continue;
+            }
 
-            // Get users with the mod/customcert:receiveissue capability in the Custom Certificate module context.
-            $userswithissue = get_users_by_capability($cmcontext, 'mod/customcert:receiveissue');
-            // Get users with mod/customcert:view capability.
-            $userswithview = get_users_by_capability($cmcontext, 'mod/customcert:view');
-            // Users with both mod/customcert:view and mod/customcert:receiveissue capabilities.
-            $userswithissueview = array_intersect_key($userswithissue, $userswithview);
-
-            // Filter remaining users by availability conditions.
-            $infomodule = new \core_availability\info_module($cm);
-            $filteredusers = $infomodule->filter_user_list($userswithissueview);
-
-            // Auto-issue only for "Email students", or when this certificate's own "Issue
-            // certificates automatically" setting is enabled (#672, #904).
-            // CargoSchool: also when "Email others" is filled in (patch of Marco, kept from 4.4.13-cargoschool3,
-            // so that certificates sent only to the company addresses keep being issued without changing
-            // every activity). The official alternative is to enable "Issue certificates automatically".
-            $autoissue = !empty($customcert->emailstudents) || !empty($customcert->issueautomatically)
-                || trim((string)($customcert->emailothers ?? '')) !== '';
-
-            // CargoSchool (mod E): as up to 4.4.13, skip the users who have not completed the certificate
-            // activity itself, while the setting customcert/cargoschoolowncompletion is on (see CARGOSCHOOL.md).
-            $owncompletion = \mod_customcert\local\cargoschool\owncompletion::enabled()
-                ? new \completion_info(get_course((int)$customcert->courseid)) : null;
-
-            foreach ($filteredusers as $filtereduser) {
-                // Do not issue certs to suspended users.
-                if ($filtereduser->suspended) {
-                    continue;
-                }
-
-                // Skip if the user has already been issued and emailed.
-                if (in_array($filtereduser->id, array_keys((array)$issuedusers))) {
-                    continue;
-                }
-
-                // Require mod/customcert:receiveissue capability.
-                if (!in_array($filtereduser->id, array_keys($userswithissue))) {
-                    continue;
-                }
-
-                // Check whether the CM is visible to this user.
-                $usercm = get_fast_modinfo($customcert->courseid, $filtereduser->id)->instances['customcert'][$customcert->id];
-                if (!$usercm->uservisible) {
-                    continue;
-                }
-
-                // CargoSchool (mod E): own completion of the certificate activity, as in 4.4.13.
+            // Check required time (if any).
+            if (!empty($customcert->requiredtime)) {
                 if (
-                    $owncompletion &&
-                    !\mod_customcert\local\cargoschool\owncompletion::is_met($owncompletion, $usercm, (int)$filtereduser->id)
+                    \mod_customcert\certificate::get_course_time(
+                        $customcert->courseid,
+                        $filtereduser->id
+                    ) < ($customcert->requiredtime * 60)
                 ) {
                     continue;
                 }
+            }
 
-                // Check required time (if any).
-                if (!empty($customcert->requiredtime)) {
-                    if (
-                        \mod_customcert\certificate::get_course_time(
-                            $customcert->courseid,
-                            $filtereduser->id
-                        ) < ($customcert->requiredtime * 60)
-                    ) {
+            // Check whether the cert has already been issued.
+            $issue = $DB->get_record(
+                'customcert_issues',
+                ['userid' => $filtereduser->id, 'customcertid' => $customcert->id],
+                'id, emailed, studentemailed'
+            );
+
+            $issueid = null;
+            $emailed = 0;
+            $studentemailed = 0;
+            if (!empty($issue)) {
+                $issueid = (int)$issue->id;
+                $emailed = (int)$issue->emailed;
+                // Preserve NULL rather than casting to int, which would collapse it into 0.
+                $studentemailed = $issue->studentemailed === null ? null : (int)$issue->studentemailed;
+            } else if (
+                $autoissue &&
+                // CargoSchool (mod F): no second certificate of the same course for the same enrolment.
+                !\mod_customcert\local\cargoschool\onepercourse::blocks(
+                    (int)$customcert->id,
+                    (int)$customcert->courseid,
+                    (int)$filtereduser->id
+                )
+            ) {
+                if ($preview !== null) {
+                    // CargoSchool preview: record, do not issue. Within one run the first certificate issued
+                    // in a course blocks the others of the same course (mod F), so the preview does the same.
+                    $key = $customcert->courseid . ':' . $filtereduser->id;
+                    if (\mod_customcert\local\cargoschool\onepercourse::enabled() && isset($this->previewissued[$key])) {
                         continue;
                     }
+                    $this->previewissued[$key] = true;
+                    $preview[] = (object)['customcert' => $customcert, 'userid' => (int)$filtereduser->id, 'action' => 'issue'];
+                    continue;
                 }
-
-                // Check whether the cert has already been issued.
-                $issue = $DB->get_record(
-                    'customcert_issues',
-                    ['userid' => $filtereduser->id, 'customcertid' => $customcert->id],
-                    'id, emailed, studentemailed'
-                );
-
-                $issueid = null;
+                // A newly created issue is always explicitly 0 (known, retryable), never NULL
+                // -- see \mod_customcert\certificate::issue_certificate().
+                $issueid = \mod_customcert\certificate::issue_certificate($customcert->id, $filtereduser->id);
                 $emailed = 0;
                 $studentemailed = 0;
-                if (!empty($issue)) {
-                    $issueid = (int)$issue->id;
-                    $emailed = (int)$issue->emailed;
-                    // Preserve NULL rather than casting to int, which would collapse it into 0.
-                    $studentemailed = $issue->studentemailed === null ? null : (int)$issue->studentemailed;
-                } else if (
-                    $autoissue &&
-                    // CargoSchool (mod F): no second certificate of the same course for the same enrolment.
-                    !\mod_customcert\local\cargoschool\onepercourse::blocks(
-                        (int)$customcert->id,
-                        (int)$customcert->courseid,
-                        (int)$filtereduser->id
-                    )
-                ) {
-                    // A newly created issue is always explicitly 0 (known, retryable), never NULL
-                    // -- see \mod_customcert\certificate::issue_certificate().
-                    $issueid = \mod_customcert\certificate::issue_certificate($customcert->id, $filtereduser->id);
-                    $emailed = 0;
-                    $studentemailed = 0;
-                }
+            }
 
-                // If we have an issue and it still needs email processing, send it now.
-                $needsemail = $emailed === 0
-                    || (!empty($customcert->emailstudents) && $studentemailed === 0);
-                if (!empty($issueid) && $needsemail) {
-                    $task = new \mod_customcert\task\email_certificate_task();
-                    $task->set_custom_data(['issueid' => $issueid, 'customcertid' => $customcert->id]);
-                    $useadhoc = get_config('customcert', 'useadhoc');
-                    if ($useadhoc) {
-                        \core\task\manager::queue_adhoc_task($task);
-                    } else {
-                        $task->execute();
-                    }
+            // If we have an issue and it still needs email processing, send it now.
+            $needsemail = $emailed === 0
+                || (!empty($customcert->emailstudents) && $studentemailed === 0);
+            if (!empty($issueid) && $needsemail && $preview !== null) {
+                // CargoSchool preview: record, do not email.
+                $preview[] = (object)['customcert' => $customcert, 'userid' => (int)$filtereduser->id, 'action' => 'email'];
+                continue;
+            }
+            if (!empty($issueid) && $needsemail) {
+                $task = new \mod_customcert\task\email_certificate_task();
+                $task->set_custom_data(['issueid' => $issueid, 'customcertid' => $customcert->id]);
+                $useadhoc = get_config('customcert', 'useadhoc');
+                if ($useadhoc) {
+                    \core\task\manager::queue_adhoc_task($task);
+                } else {
+                    $task->execute();
                 }
             }
         }
