@@ -59,6 +59,13 @@ $settings->add(new admin_setting_heading(
     get_string('cargoschoolheading', 'customcert'),
     get_string('cargoschoolheading_desc', 'customcert')
 ));
+$settings->add(new admin_setting_configtext(
+    'customcert/cargoschoolonepercoursemonths',
+    get_string('cargoschoolonepercoursemonths', 'customcert'),
+    get_string('cargoschoolonepercoursemonths_desc', 'customcert'),
+    20,
+    PARAM_INT
+));
 $settings->add(new admin_setting_configcheckbox(
     'customcert/cargoschoolowncompletion',
     get_string('cargoschoolowncompletion', 'customcert'),

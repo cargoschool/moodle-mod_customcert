@@ -29,7 +29,9 @@ $string['cargoschooldirectors_desc'] = 'Username del direttore della scuola, uno
 $string['cargoschoolheading'] = 'CargoSchool';
 $string['cargoschoolheading_desc'] = 'Modifiche CargoSchool, descritte in CARGOSCHOOL.md del plugin.';
 $string['cargoschoolonepercourse'] = 'Un solo certificato per studente nel corso';
-$string['cargoschoolonepercourse_desc'] = 'L\'emissione automatica non emette (né invia per mail) un certificato allo studente che ha già un certificato di un\'altra attività dello stesso corso, emesso dall\'inizio della sua iscrizione attuale. Chi viene reiscritto per un nuovo ciclo può ricevere il certificato nuovo. Lo studente può comunque aprire da sé un\'attività certificato.';
+$string['cargoschoolonepercourse_desc'] = 'L\'emissione automatica non emette (né invia per mail) un certificato allo studente che ha già un certificato di un\'altra attività dello stesso corso, emesso negli ultimi mesi indicati sotto. Chi rifà il corso per il rinnovo, dopo quel periodo, riceve il certificato nuovo. Lo studente può comunque aprire da sé un\'attività certificato.';
+$string['cargoschoolonepercoursemonths'] = 'Un certificato per corso: mesi';
+$string['cargoschoolonepercoursemonths_desc'] = 'Un certificato di un\'altra attività dello stesso corso emesso negli ultimi mesi blocca quello nuovo. 0 = sempre, qualunque sia la data. Di serie 20: la certificazione dura 24 mesi e il rinnovo parte 3 mesi prima della scadenza.';
 $string['cargoschoolowncompletion'] = 'Emetti solo a chi ha completato l\'attività certificato';
 $string['cargoschoolowncompletion_desc'] = 'Come fino alla versione 4.4.13: l\'emissione automatica salta chi non ha completato l\'attività certificato stessa (per esempio "visualizza l\'attività" o completamento manuale). La versione 4.4.16 emette a tutti quelli che soddisfano le restrizioni d\'accesso: togliere la spunta solo dopo aver verificato, con il comando php mod/customcert/cli/cargoschool_owncompletion.php, che nessun certificato partirebbe a studenti che hanno superato il corso tempo fa.';
 $string['sitelanguage'] = 'Lingua forzata dei certificati';

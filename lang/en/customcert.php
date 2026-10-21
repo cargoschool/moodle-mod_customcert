@@ -37,7 +37,9 @@ $string['cargoschooldirectors_desc'] = 'Username of the school director, one per
 $string['cargoschoolheading'] = 'CargoSchool';
 $string['cargoschoolheading_desc'] = 'CargoSchool changes, described in CARGOSCHOOL.md of the plugin.';
 $string['cargoschoolonepercourse'] = 'One certificate per student in a course';
-$string['cargoschoolonepercourse_desc'] = 'The automatic issuing does not issue (nor email) a certificate to a student who already has a certificate of another activity of the same course, issued since the start of his current enrolment. A student enrolled again for a new cycle can get the new certificate. Students can still open a certificate activity themselves.';
+$string['cargoschoolonepercourse_desc'] = 'The automatic issuing does not issue (nor email) a certificate to a student who already has a certificate of another activity of the same course, issued in the last months set below. A student who takes the course again for the renewal, after that time, gets the new certificate. Students can still open a certificate activity themselves.';
+$string['cargoschoolonepercoursemonths'] = 'One certificate per course: months';
+$string['cargoschoolonepercoursemonths_desc'] = 'A certificate of another activity of the same course issued in the last months blocks the new one. 0 = always, whatever the date. Default 20: the certification lasts 24 months and the renewal starts 3 months before the expiry.';
 $string['cargoschoolowncompletion'] = 'Issue only to who completed the certificate activity';
 $string['cargoschoolowncompletion_desc'] = 'As up to version 4.4.13: the automatic issuing skips the users who have not completed the certificate activity itself (for example "view the activity" or manual completion). Version 4.4.16 issues to everybody who meets the access restrictions: turn this off only after checking, with the command php mod/customcert/cli/cargoschool_owncompletion.php, that no certificate would be sent to students who passed long ago.';
 $string['certificate'] = 'Certificate';

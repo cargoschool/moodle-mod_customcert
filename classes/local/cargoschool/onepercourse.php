@@ -17,20 +17,28 @@
 namespace mod_customcert\local\cargoschool;
 
 /**
- * CargoSchool (mod F): one certificate per student per enrolment in a course.
+ * CargoSchool (mod F): one certificate per student in a course, within a window of months.
  *
  * A course can hold several certificate activities (old and new editions, one per client,
  * the single LIVE certificate). Without this rule the issue task issues and emails every one
  * of them to the same student. With the setting customcert/cargoschoolonepercourse (on by
  * default) the task does not issue a certificate to a student who already has a certificate
- * of another activity of the same course issued since the start of his current enrolment.
- * A student enrolled again for a new cycle (new enrolment start) can get the new certificate.
+ * of another activity of the same course issued in the last customcert/cargoschoolonepercoursemonths
+ * months (20 by default, 0 = ever). A student who takes the course again for the renewal, about
+ * two years later, gets the new certificate.
+ *
+ * Until 4.4.16-cargoschool.4 the window started at the user's current enrolment: on the CargoSchool
+ * sites enrolments are created again or their dates moved without a new cycle, so old certificates
+ * looked like a previous cycle and the task issued duplicates (staging, 21/10/2026).
  *
  * @package    mod_customcert
  * @copyright  2026 CargoSchool
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class onepercourse {
+    /** Default window in months. */
+    public const DEFAULT_MONTHS = 20;
+
     /**
      * Is the rule on (setting customcert/cargoschoolonepercourse, on when never saved)?
      *
@@ -42,26 +50,36 @@ class onepercourse {
     }
 
     /**
-     * Start of the user's current enrolment in the course: the latest start among the active
-     * enrolments (start date, or creation when there is no start date); 0 without enrolments.
+     * Window in months (setting customcert/cargoschoolonepercoursemonths; 0 = ever).
      *
-     * @param int $courseid
-     * @param int $userid
      * @return int
      */
-    public static function enrolment_start(int $courseid, int $userid): int {
-        global $DB;
-        $sql = "SELECT MAX(CASE WHEN ue.timestart > 0 THEN ue.timestart ELSE ue.timecreated END)
-                  FROM {user_enrolments} ue
-                  JOIN {enrol} e ON e.id = ue.enrolid
-                 WHERE e.courseid = :courseid AND ue.userid = :userid
-                   AND ue.status = :uestatus AND e.status = :estatus";
-        return (int)$DB->get_field_sql($sql, ['courseid' => $courseid, 'userid' => $userid,
-            'uestatus' => ENROL_USER_ACTIVE, 'estatus' => ENROL_INSTANCE_ENABLED]);
+    public static function months(): int {
+        $setting = get_config('customcert', 'cargoschoolonepercoursemonths');
+        if ($setting === false || $setting === '' || !is_numeric($setting)) {
+            return self::DEFAULT_MONTHS;
+        }
+        return max(0, (int)$setting);
     }
 
     /**
-     * The other certificate already issued to the user in the same course for this enrolment, if any.
+     * Oldest issue date that still counts, 0 when every issue counts.
+     *
+     * @param int $now
+     * @return int
+     */
+    public static function since(int $now = 0): int {
+        $months = self::months();
+        if ($months === 0) {
+            return 0;
+        }
+        $date = new \DateTime('@' . ($now ?: time()));
+        $date->modify('-' . $months . ' months');
+        return $date->getTimestamp();
+    }
+
+    /**
+     * The other certificate already issued to the user in the same course within the window, if any.
      *
      * @param int $customcertid the certificate about to be issued
      * @param int $courseid
@@ -77,7 +95,7 @@ class onepercourse {
                    AND ci.timecreated >= :since
               ORDER BY ci.timecreated DESC, ci.id DESC";
         $params = ['courseid' => $courseid, 'userid' => $userid, 'customcertid' => $customcertid,
-            'since' => self::enrolment_start($courseid, $userid)];
+            'since' => self::since()];
         $records = $DB->get_records_sql($sql, $params, 0, 1);
         return $records ? reset($records) : null;
     }
